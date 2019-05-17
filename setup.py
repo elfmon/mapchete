@@ -52,6 +52,7 @@ setup(
         ],
         'mapchete.formats.drivers': [
             'geojson=mapchete.formats.default.geojson',
+            'gpkg=mapchete.formats.default.gpgk',
             'gtiff=mapchete.formats.default.gtiff',
             'mapchete_input=mapchete.formats.default.mapchete_input',
             'png_hillshade=mapchete.formats.default.png_hillshade',
