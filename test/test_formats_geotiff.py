@@ -237,6 +237,11 @@ def test_output_single_gtiff(output_single_gtiff):
         assert not data[0].mask.all()
 
 
+def test_output_single_gtiff_multizoom(output_single_gtiff):
+    with mapchete.open(output_single_gtiff.path) as mp:
+        1/0
+
+
 def test_output_single_gtiff_errors(output_single_gtiff):
     # single gtiff does not work on multiple zoom levels
     with pytest.raises(ValueError):

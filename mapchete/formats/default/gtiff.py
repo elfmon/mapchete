@@ -391,21 +391,13 @@ class GTiffSingleFileOutputWriter(
         self.rio_file = None
         super().__init__(output_params, **kwargs)
         self._set_attributes(output_params)
-        if len(self.output_params["delimiters"]["zoom"]) != 1:
-            raise ValueError("single file output only works with one zoom level")
-        self.zoom = output_params["delimiters"]["zoom"][0]
-        if "overviews" in output_params:
-            self.overviews = True
-            self.overviews_resampling = output_params.get(
-                "overviews_resampling", "nearest"
-            )
-            self.overviews_levels = output_params.get(
-                "overviews_levels", [2**i for i in range(1, self.zoom + 1)]
-            )
-        else:
-            self.overviews = False
+        self.zoom_levels = self.output_params["delimiters"]["zoom"]
+        logger.debug(self.zoom_levels)
+        self.rio_overviews = list(range(0, max(self.zoom_levels) - min(self.zoom_levels)))
+        logger.debug(self.rio_overviews)
 
     def prepare(self, process_area=None, **kwargs):
+        base_zoom = max(self.zoom_levels)
         bounds = snap_bounds(
             bounds=Bounds(
                 *process_area.intersection(
@@ -413,13 +405,13 @@ class GTiffSingleFileOutputWriter(
                 ).bounds
             ),
             pyramid=self.pyramid,
-            zoom=self.zoom
+            zoom=base_zoom
         ) if process_area else self.output_params["delimiters"]["effective_bounds"]
         height = math.ceil(
-            (bounds.top - bounds.bottom) / self.pyramid.pixel_x_size(self.zoom)
+            (bounds.top - bounds.bottom) / self.pyramid.pixel_x_size(base_zoom)
         )
         width = math.ceil(
-            (bounds.right - bounds.left) / self.pyramid.pixel_x_size(self.zoom)
+            (bounds.right - bounds.left) / self.pyramid.pixel_x_size(base_zoom)
         )
         logger.debug("output raster bounds: %s", bounds)
         logger.debug("output raster shape: %s, %s", height, width)
@@ -427,11 +419,11 @@ class GTiffSingleFileOutputWriter(
             GTIFF_DEFAULT_PROFILE,
             driver="GTiff",
             transform=Affine(
-                self.pyramid.pixel_x_size(self.zoom),
+                self.pyramid.pixel_x_size(base_zoom),
                 0,
                 bounds.left,
                 0,
-                -self.pyramid.pixel_y_size(self.zoom),
+                -self.pyramid.pixel_y_size(base_zoom),
                 bounds.top
             ),
             height=height,
@@ -456,7 +448,15 @@ class GTiffSingleFileOutputWriter(
                 logger.debug("remove existing file: %s", self.path)
                 os.remove(self.path)
         logger.debug("open output file: %s", self.path)
-        self.rio_file = rasterio.open(self.path, "w+", **self._profile)
+        from rasterio.io import MemoryFile
+        self.rio_memfile = MemoryFile()
+        # self.rio_file = rasterio.open(self.path, "w+", **self._profile)
+        self.rio_file = self.rio_memfile.open(**self._profile)
+        self.rio_overview_files = {}
+        # self.rio_overview_files = {
+        #     l: rasterio.open(self.path, "r+", overview_level=l)
+        #     for l in self.rio_overviews
+        # }
 
     def read(self, output_tile, **kwargs):
         """
@@ -565,22 +565,26 @@ class GTiffSingleFileOutputWriter(
 
     def close(self, exc_type=None, exc_value=None, exc_traceback=None):
         """Gets called if process is closed."""
-        try:
-            if not exc_type and self.overviews and self.rio_file is not None:
-                logger.debug(
-                    "build overviews using %s resampling and levels %s",
-                    self.overviews_resampling, self.overviews_levels
-                )
-                self.rio_file.build_overviews(
-                    self.overviews_levels, Resampling[self.overviews_resampling]
-                )
-                self.rio_file.update_tags(
-                    ns='rio_overview', resampling=self.overviews_resampling
-                )
-        finally:
-            if self.rio_file is not None:
-                logger.debug("close rasterio file handle.")
-                self.rio_file.close()
+        # try:
+        #     if not exc_type and self.overviews and self.rio_file is not None:
+        #         logger.debug(
+        #             "build overviews using %s resampling and levels %s",
+        #             self.overviews_resampling, self.overviews_levels
+        #         )
+        #         self.rio_file.build_overviews(
+        #             self.overviews_levels, Resampling[self.overviews_resampling]
+        #         )
+        #         self.rio_file.update_tags(
+        #             ns='rio_overview', resampling=self.overviews_resampling
+        #         )
+        # finally:
+        if self.rio_file is not None:
+            logger.debug("close rasterio file handle.")
+            self.rio_file.close()
+        for l, i in self.rio_overview_files.items():
+            logger.debug("close rasterio file handle.")
+            i.close()
+        self.rio_memfile.close()
 
 
 def _window_in_out_file(window, rio_file):
