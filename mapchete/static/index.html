@@ -79,6 +79,20 @@
 
             var options = extend(defaults, {
                 url: "http://tiles.maps.eox.at/wmts/",
+                name: "EOX::Maps S2Cloudless 2018",
+                {% if is_mercator %}
+                layer: 's2cloudless-2018_3857',
+                {% else %}
+                layer: 's2cloudless-2018',
+                {% endif %}
+                format: 'image/png',
+                isBaseLayer:true,
+            });
+            var s2cloudless2018_WGS84_wmts_layer = new OpenLayers.Layer.WMTS(options);
+            map.addLayer(s2cloudless2018_WGS84_wmts_layer);
+
+            var options = extend(defaults, {
+                url: "http://tiles.maps.eox.at/wmts/",
                 name: "EOX::Maps Coastline",
                 {% if is_mercator %}
                 layer: 'coastline_3857',

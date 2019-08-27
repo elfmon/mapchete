@@ -1,6 +1,10 @@
 """Contour line extraction using matplotlib."""
 
+import logging
 from shapely.geometry import LineString, mapping
+
+
+logger = logging.getLogger(__name__)
 
 
 def extract_contours(array, tile, interval=100, field='elev', base=0):
@@ -26,8 +30,8 @@ def extract_contours(array, tile, interval=100, field='elev', base=0):
         contours as GeoJSON-like pairs of properties and geometry
     """
     import matplotlib.pyplot as plt
-    levels = _get_contour_values(
-        array.min(), array.max(), interval=interval, base=base)
+    levels = _get_contour_values(array.min(), array.max(), interval=interval, base=base)
+    logger.debug("contour levels: %s", str(levels))
     if not levels:
         return []
     contours = plt.contour(array, levels)

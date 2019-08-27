@@ -117,7 +117,7 @@ class OutputDataReader(base.TileDirectoryOutputReader):
         validate_values(config, [("schema", dict), ("path", str)])
         validate_values(config["schema"], [("properties", dict), ("geometry", str)])
         if config["schema"]["geometry"] not in [
-            "Geometry", "Point", "MultiPoint", "Line", "MultiLine",
+            "Geometry", "Point", "MultiPoint", "LineString", "MultiLineString",
             "Polygon", "MultiPolygon"
         ]:
             raise TypeError("invalid geometry type")

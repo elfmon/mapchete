@@ -86,7 +86,7 @@ def calculate_slope_aspect(elevation, xres, yres, z=1.0, scale=1.0):
     return slope, aspect
 
 
-def hillshade(elevation, tile, azimuth=315.0, altitude=45.0, z=1.0, scale=1.0, ):
+def hillshade(elevation, tile, azimuth=315.0, altitude=45.0, z=1.0, scale=1.0):
     """
     Return hillshaded numpy array.
 
@@ -122,7 +122,8 @@ def hillshade(elevation, tile, azimuth=315.0, altitude=45.0, z=1.0, scale=1.0, )
         * np.cos((azimuth - 90.0) * deg2rad - aspect)
     # shaded now has values between -1.0 and +1.0
     # stretch to 0 - 255 and invert
-    shaded = (((shaded + 1.0) / 2) * -255.0).astype("uint8")
+    shaded = np.clip(shaded * 255.0, 1, 255).astype("uint8")
+    # shaded = (((shaded + 1.0) / 2) * 255.0).astype("uint8")
     # add one pixel padding using the edge values
     return ma.masked_array(
         data=np.pad(shaded, 1, mode='edge'), mask=elevation.mask

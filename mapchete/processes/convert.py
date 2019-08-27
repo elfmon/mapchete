@@ -10,7 +10,7 @@ def execute(
     td_matching_method="gdal",
     td_matching_max_zoom=None,
     td_matching_precision=8,
-    td_fallback_to_higher_zoom=False,
+    td_fallback_to_higher_zoom=True,
     clip_pixelbuffer=0,
     scale_ratio=1.,
     scale_offset=0.,
