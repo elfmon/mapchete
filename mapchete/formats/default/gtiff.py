@@ -31,6 +31,7 @@ compress: string
 """
 
 from affine import Affine
+from contextlib import ExitStack
 import logging
 import math
 import numpy as np
@@ -38,8 +39,10 @@ import numpy.ma as ma
 import os
 import rasterio
 from rasterio.enums import Resampling
+from rasterio.io import MemoryFile
 from rasterio.windows import from_bounds
 from shapely.geometry import box
+from tempfile import NamedTemporaryFile
 from tilematrix import Bounds
 import warnings
 
@@ -70,6 +73,8 @@ GTIFF_DEFAULT_PROFILE = {
     "interleave": "band",
     "nodata": 0
 }
+# from https://github.com/cogeotiff/rio-cogeo/blob/46aadd72677782f73974c5e86e3e8624ab11e7d3/rio_cogeo/cogeo.py#L37
+IN_MEMORY_THRESHOLD = int(os.environ.get("IN_MEMORY_THRESHOLD", 10980 * 10980))
 
 
 class OutputDataReader():
@@ -108,8 +113,7 @@ class OutputDataReader():
 
 class OutputDataWriter():
     """
-    Constructor class which either returns GTiffSingleFileOutputWriter or
-    GTiffTileDirectoryOutputWriter.
+    Constructor class which either returns single file or TileDirectory writer.
 
     Parameters
     ----------
@@ -395,7 +399,7 @@ class GTiffSingleFileOutputWriter(
     def __init__(self, output_params, **kwargs):
         """Initialize."""
         logger.debug("output is single file")
-        self.rio_file = None
+        self.ctx = ExitStack()
         super().__init__(output_params, **kwargs)
         self._set_attributes(output_params)
         if len(self.output_params["delimiters"]["zoom"]) != 1:
@@ -411,8 +415,11 @@ class GTiffSingleFileOutputWriter(
             )
         else:
             self.overviews = False
+            self.overviews_resampling = None
+            self.overviews_levels = None
 
     def prepare(self, process_area=None, **kwargs):
+        """Actually prepare the output file to write to."""
         bounds = snap_bounds(
             bounds=Bounds(
                 *process_area.intersection(
@@ -451,8 +458,6 @@ class GTiffSingleFileOutputWriter(
             }
         )
         logger.debug("single GTiff profile: %s", self._profile)
-        if height * width > 20000 * 20000:
-            raise ValueError("output GeoTIFF too big")
         # set up rasterio
         if path_exists(self.path):
             if self.output_params["mode"] != "overwrite":
@@ -462,7 +467,15 @@ class GTiffSingleFileOutputWriter(
             else:
                 logger.debug("remove existing file: %s", self.path)
                 os.remove(self.path)
-        logger.debug("open output file: %s", self.path)
+        if height * width > IN_MEMORY_THRESHOLD:
+            self.tmpfile = self.ctx.enter_context(MemoryFile())
+            self.tmp_dst = self.ctx.enter_context(self.tmpfile.open(**self._profile))
+        else:
+            self.tmpfile = self.ctx.enter_context(TemporaryRasterFile(dst_path))
+            self.tmp_dst = self.ctx.enter_context(
+                rasterio.open(self.tmpfile.name, "w", **self._profile)
+            )
+            raise ValueError("output GeoTIFF too big")
         self.rio_file = rasterio.open(self.path, "w+", **self._profile)
 
     def read(self, output_tile, **kwargs):
@@ -585,9 +598,8 @@ class GTiffSingleFileOutputWriter(
                     ns='rio_overview', resampling=self.overviews_resampling
                 )
         finally:
-            if self.rio_file is not None:
-                logger.debug("close rasterio file handle.")
-                self.rio_file.close()
+            if self.ctx is not None:
+                self.ctx.close()
 
 
 def _window_in_out_file(window, rio_file):
